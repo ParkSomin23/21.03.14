@@ -9,8 +9,9 @@ Mat drawlines(Mat img1, Mat img2, Mat lines, vector<Point2f>pts1, vector<Point2f
 Mat FMat(Mat img, vector<Point2f> kp1, vector<Point2f> kp2);
 Mat computeEpilines(Mat F, vector<Point2f>kp, int mode);
 
+Mat img1;
 int main() {
-	Mat img1 = imread("epip1.jpg", IMREAD_GRAYSCALE);
+	img1 = imread("epip1.jpg", IMREAD_GRAYSCALE);
 	Mat img2 = imread("epip2.jpg", IMREAD_GRAYSCALE);
 
 	if (img1.empty() || img2.empty())
@@ -64,21 +65,23 @@ int main() {
 		kp2.push_back(keypoints2[goodMatches[i].trainIdx].pt);
 	}
 
+	//for(int i)
+
 	//epip
 	Mat fundamental_matrix = findFundamentalMat(kp1, kp2, FM_8POINT);//, 3, 0.99); //FM_RANSAC
 	cout << "Fundamental_matrix" << endl;
 	cout << fundamental_matrix << endl;
 
-	Mat l;
-	l = FMat(img1, kp1, kp2);
+	Mat F;
+	F = FMat(img1, kp1, kp2);
 	cout << "my F matrix" << endl;
-	cout << l << endl;
+	cout << F << endl;
 
 	Mat lines1, lines2;
 	//computeCorrespondEpilines(kp2, 2, fundamental_matrix, lines1);
 	//computeCorrespondEpilines(kp1, 1, fundamental_matrix, lines2);
-	lines1 = computeEpilines(fundamental_matrix, kp2, 2);
-	lines2 = computeEpilines(fundamental_matrix, kp1, 1);
+	lines1 = computeEpilines(F, kp2, 2);
+	lines2 = computeEpilines(F, kp1, 1);
 
 	Mat img3 = drawlines(img1, img2, lines1, kp1, kp2);
 	Mat img4 = drawlines(img2, img1, lines2, kp2, kp1);
@@ -91,7 +94,8 @@ int main() {
 }
 
 vector<Point2f> NormPoints(vector<Point2f> kp, Mat T) {
-	float x_mean = 0;
+	
+	/*float x_mean = 0;
  	float y_mean = 0;
 
 	int size = kp.size();
@@ -120,6 +124,7 @@ vector<Point2f> NormPoints(vector<Point2f> kp, Mat T) {
 
 	meanDist /= float(size);
 	float scale = sqrt(2) / meanDist;
+	
 
 	T.at<float>(0, 0) = scale;
 	T.at<float>(0, 2) = -scale * x_mean;
@@ -128,19 +133,35 @@ vector<Point2f> NormPoints(vector<Point2f> kp, Mat T) {
 	T.at<float>(1, 2) = -scale * y_mean;
 
 	T.at<float>(2, 2) = 1;
-
-//	cout << " T " << endl << T.size() << endl << T << endl << endl;
+	*/
+	//cout << " T " << endl << T.size() << endl << T << endl << endl;
 	//cout << "newKp" << endl << newKp.size() << endl;
 	//cout << newKp.col(0) << endl;
 	
-	vector<Point2f> newpt;
-	for (int i = 0; i < size; i++) {
-		Mat pts = T * newKp.col(i);
-		//cout << "newkp.col" << newKp.col(i).size() << endl;
-		//cout << pts << endl << pts.size() << endl << endl;
-		newpt.push_back(Point(pts.at<float>(0, 0), pts.at<float>(1, 0)));
+	T.at<float>(0, 0) = 2.0f / float(img1.cols);
+	T.at<float>(0, 2) = -1.0f;
+	
+	T.at<float>(1, 1) = 2.0f / float(img1.rows);
+	T.at<float>(1, 2) = -1.0f;
+
+	T.at<float>(2, 2) = 1.0f;
+
+	int size = kp.size();
+
+	Mat newKp(3, size, CV_32F);
+	for (int i = 0; i < kp.size(); i++) {
+		newKp.at<float>(0, i) = kp[i].x;
+		newKp.at<float>(1, i) = kp[i].y;
+		newKp.at<float>(2, i) = 1;
 	}
 
+	vector<Point2f> newpt;
+	for (int i = 0; i < size; i++) {
+		
+		Mat pts = T * newKp.col(i);
+		newpt.push_back(Point2f(pts.at<float>(0), pts.at<float>(1)));
+	}
+	
 	return newpt;
 }
 
@@ -162,7 +183,7 @@ Mat FMat(Mat img, vector<Point2f> keypoint1, vector<Point2f> keypoint2) { //kp1,
 	Mat T1 = Mat::zeros(3, 3, CV_32F);
 	Mat T2 = Mat::zeros(3, 3, CV_32F);
 
-  	vector<Point2f> kp1 = NormPoints(keypoint1, T1);
+	vector<Point2f> kp1 = NormPoints(keypoint1, T1);
 	vector<Point2f> kp2 = NormPoints(keypoint2, T2);
 
 	int size = kp1.size();
@@ -173,23 +194,23 @@ Mat FMat(Mat img, vector<Point2f> keypoint1, vector<Point2f> keypoint2) { //kp1,
 		A.at<float>(i, 2) = kp2[i].x;
 
 		A.at<float>(i, 3) = kp1[i].x * kp2[i].y;
-		A.at<float>(i, 4) = kp1[i].x * kp2[i].y;
+		A.at<float>(i, 4) = kp1[i].y * kp2[i].y;
 		A.at<float>(i, 5) = kp2[i].y;
 
 		A.at<float>(i, 6) = kp1[i].x;
-		A.at<float>(i, 7) = kp2[i].y;
+		A.at<float>(i, 7) = kp1[i].y;
 		A.at<float>(i, 8) = 1;
 	}
 
 	SVD svd(A, SVD::FULL_UV);
 
-	Mat F; 
-	transpose(svd.vt, F);
-
-	F = F.col(8);
-	//F =  F.reshape(3, 3);
+	Mat tmp; 
+	transpose(svd.vt, tmp);
 	
-	Mat F2(3,3, CV_32F);
+	Mat F;
+	F = tmp.col(8);
+	
+	Mat F2(3, 3, CV_32F); // row, col
 	F2.at<float>(0, 0) = F.at<float>(0, 0);
 	F2.at<float>(0, 1) = F.at<float>(1, 0);
 	F2.at<float>(0, 2) = F.at<float>(2, 0);
@@ -204,21 +225,24 @@ Mat FMat(Mat img, vector<Point2f> keypoint1, vector<Point2f> keypoint2) { //kp1,
 	SVD svdF(F2, SVD::FULL_UV);
 
 	Mat d = Mat::zeros(3, 3, CV_32F);
+	
 	d.at<float>(0, 0) = svdF.w.at<float>(0);
 	d.at<float>(1, 1) = svdF.w.at<float>(1);
 	d.at<float>(2, 2) = 0.0;
 
 	Mat fin = svdF.u * d * svdF.vt;
-
+	
 	transpose(T2, T2);
+	
 	fin = T2 * fin * T1;
 
 	float F33 = fin.at<float>(2, 2);
-	fin /= F33;
-	//fin.at<float>(2, 2) = 1;
+	
+	for (int i = 0; i < 3; i++)
+		for (int j = 0; j < 3; j++)
+			fin.at<float>(i, j) = fin.at<float>(i, j) / F33;
 
 	return fin;
-
 }
 
 
@@ -236,8 +260,8 @@ Mat drawlines(Mat img1, Mat img2, Mat lines, vector<Point2f>pts1, vector<Point2f
 
 		//line(dst, Point(pointers_1[i][0], pointers_1[i][1]), Point(pointers_2[idx][0] + first.cols, pointers_2[idx][1]), (255, 0, 0), 2);
 		line(newImg, Point(x0, y0), Point(x1, y1), (0.255, 3), 1);
-		circle(newImg, pts1[i], 5, (0.255, 3), 1);
-		circle(newImg, pts2[i], 5, (0.255, 3), 1);
+		circle(newImg, Point(pts1[i].x, pts1[i].y), 5, (0.255, 3), 1);
+		//circle(newImg, pts2[i], 5, (0.255, 3), 1);
 	}
 
 	return newImg;
@@ -245,7 +269,10 @@ Mat drawlines(Mat img1, Mat img2, Mat lines, vector<Point2f>pts1, vector<Point2f
 
 Mat computeEpilines(Mat F, vector<Point2f>kp, int mode) {
 	/*
+	mode == 1
 	l2 = F * x1
+
+	mode == 2
 	l1 = F.T * x2
 
 	ax + by + c = 0 (a, b, c)
@@ -265,6 +292,7 @@ Mat computeEpilines(Mat F, vector<Point2f>kp, int mode) {
 
 		Mat tmp;
 		Mat Ft;
+
 		if(mode == 1)
 			tmp = F * pt;
 		else {
